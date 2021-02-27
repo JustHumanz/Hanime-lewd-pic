@@ -94,8 +94,16 @@ func StartCheck() {
 			for _, v2 := range OldPayload.Data {
 				if v.ID != v2.ID {
 					log.Info("New Pic", v.URL)
-					body := bytes.NewReader([]byte(v.URL))
-					req, err := http.NewRequest("POST", DiscordWebHookURL, body)
+					Pic, err := json.Marshal(map[string]interface{}{
+						"username":   v.Username,
+						"avatar_url": v.UserAvatarURL,
+						"content":    v.URL,
+					})
+					if err != nil {
+						log.Error(err)
+					}
+
+					req, err := http.NewRequest("POST", DiscordWebHookURL, bytes.NewReader(Pic))
 					if err != nil {
 						log.Error(err)
 					}
@@ -106,9 +114,6 @@ func StartCheck() {
 						log.Error(err)
 					}
 					defer resp.Body.Close()
-				} else {
-					log.Info("Still same")
-					return
 				}
 			}
 		}
