@@ -49,7 +49,7 @@ func init() {
 	if Web != "" {
 		DiscordWebHookURL = Web
 	} else {
-		log.Panic("WebHookURL not found")
+		log.Panic("DISCORD WebHookURL not found")
 	}
 	log.SetFormatter(&log.TextFormatter{FullTimestamp: true})
 }
