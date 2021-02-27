@@ -114,6 +114,7 @@ func StartCheck() {
 						log.Error(err)
 					}
 					defer resp.Body.Close()
+					break
 				}
 			}
 		}
