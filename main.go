@@ -20,9 +20,9 @@ import (
 var (
 	HTTPProxy         *url.URL
 	Payload           LewdPic
-	OldPayload        LewdPic
 	DiscordWebHookURL string
 	FistRunning       *bool
+	LewdsPic          []LewdPayload
 )
 
 const (
@@ -59,7 +59,13 @@ func main() {
 	StartCheck()
 	c := cron.New()
 	c.Start()
-	c.AddFunc("@every 0h5m0s", StartCheck)
+
+	if os.Getenv("Dev") == "true" {
+		log.Info("Running dev mode")
+		c.AddFunc("@every 0h1m0s", StartCheck)
+	} else {
+		c.AddFunc("@every 0h5m0s", StartCheck)
+	}
 
 	shutdown := make(chan int)
 	sigChan := make(chan os.Signal, 1)
@@ -85,41 +91,53 @@ func StartCheck() {
 
 	if *FistRunning {
 		log.Info("First Running")
-		OldPayload = Payload
 		tmp := false
 		FistRunning = &tmp
-		return
+		for _, v := range Payload.Data {
+			LewdsPic = append(LewdsPic, v)
+		}
 	} else {
 		for _, v := range Payload.Data {
-			for _, v2 := range OldPayload.Data {
-				if v.ID != v2.ID {
-					log.Info("New Pic", v.URL)
-					Pic, err := json.Marshal(map[string]interface{}{
-						"username":   v.Username,
-						"avatar_url": v.UserAvatarURL,
-						"content":    v.URL,
-					})
-					if err != nil {
-						log.Error(err)
-					}
-
-					req, err := http.NewRequest("POST", DiscordWebHookURL, bytes.NewReader(Pic))
-					if err != nil {
-						log.Error(err)
-					}
-					req.Header.Set("Content-Type", "application/json")
-
-					resp, err := http.DefaultClient.Do(req)
-					if err != nil {
-						log.Error(err)
-					}
-					defer resp.Body.Close()
-					break
+			if v.IsNew() {
+				v.Append()
+				log.Info("New Pic", v.URL)
+				Pic, err := json.Marshal(map[string]interface{}{
+					"username":   v.Username,
+					"avatar_url": v.UserAvatarURL,
+					"content":    v.URL,
+				})
+				if err != nil {
+					log.Error(err)
 				}
+
+				req, err := http.NewRequest("POST", DiscordWebHookURL, bytes.NewReader(Pic))
+				if err != nil {
+					log.Error(err)
+				}
+				req.Header.Set("Content-Type", "application/json")
+
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil {
+					log.Error(err)
+				}
+
+				defer resp.Body.Close()
 			}
 		}
-		OldPayload = Payload
 	}
+}
+
+func (Data LewdPayload) IsNew() bool {
+	for _, v := range LewdsPic {
+		if v == Data {
+			return false
+		}
+	}
+	return true
+}
+
+func (Data LewdPayload) Append() {
+	LewdsPic = append(LewdsPic, Data)
 }
 
 func Curl(URL string) []byte {
