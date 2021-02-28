@@ -30,7 +30,7 @@ var (
 )
 
 const (
-	EndPoint = "https://danbooru.donmai.us/posts.json?tags=order:change%20"
+	EndPoint = "https://147.135.4.93/posts.json?tags=order:change%20"
 )
 
 func init() {
@@ -182,6 +182,7 @@ func Curl(URL string) ([]byte, error) {
 				DialContext: (&net.Dialer{
 					Timeout: 10 * time.Second,
 				}).DialContext,
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 			},
 		}
 	}
