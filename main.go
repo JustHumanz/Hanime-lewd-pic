@@ -22,7 +22,7 @@ import (
 
 var (
 	HTTPProxy         *url.URL
-	Payload           [][]Danbooru
+	Payload           []Danbooru
 	DiscordWebHookURL string
 	FistRunning       *bool
 	LewdsPic          []string
@@ -89,59 +89,50 @@ func main() {
 
 func StartCheck() {
 	for _, v := range Tags {
-		var tmp []Danbooru
 		log.Info("Start checking lewd ", v)
 		Data, err := Curl(EndPoint + v + "&limit=20")
 		if err != nil {
 			log.Error(err)
 			break
 		}
-		err = json.Unmarshal(Data, &tmp)
+		err = json.Unmarshal(Data, &Payload)
 		if err != nil {
 			log.Error(err)
 		}
-		Payload = append(Payload, tmp)
-	}
-
-	if Payload != nil {
 		if *FistRunning {
 			log.Info("First Running")
 			tmp := false
 			FistRunning = &tmp
 			for _, v := range Payload {
-				for _, v2 := range v {
-					if v2.CheckRSS() {
-						v2.AddNewLewd()
-					}
+				if v.CheckRSS() {
+					v.AddNewLewd()
 				}
 			}
 		} else {
 			for _, v := range Payload {
-				for _, v2 := range v {
-					if v2.CheckNew() && v2.CheckRSS() {
-						log.Info("New Pic", v2.ID)
-						v2.AddNewLewd()
-						fixURL := strings.Replace(v2.FileURL, "147.135.4.93", "danbooru.donmai.us", -1)
-						Pic, err := json.Marshal(map[string]interface{}{
-							"content": fixURL,
-						})
-						if err != nil {
-							log.Error(err)
-						}
-
-						req, err := http.NewRequest("POST", DiscordWebHookURL, bytes.NewReader(Pic))
-						if err != nil {
-							log.Error(err)
-						}
-						req.Header.Set("Content-Type", "application/json")
-
-						resp, err := http.DefaultClient.Do(req)
-						if err != nil {
-							log.Error(err)
-						}
-
-						defer resp.Body.Close()
+				if v.CheckNew() && v.CheckRSS() {
+					log.Info("New Pic", v.ID)
+					v.AddNewLewd()
+					fixURL := strings.Replace(v.FileURL, "147.135.4.93", "danbooru.donmai.us", -1)
+					Pic, err := json.Marshal(map[string]interface{}{
+						"content": fixURL,
+					})
+					if err != nil {
+						log.Error(err)
 					}
+
+					req, err := http.NewRequest("POST", DiscordWebHookURL, bytes.NewReader(Pic))
+					if err != nil {
+						log.Error(err)
+					}
+					req.Header.Set("Content-Type", "application/json")
+
+					resp, err := http.DefaultClient.Do(req)
+					if err != nil {
+						log.Error(err)
+					}
+
+					defer resp.Body.Close()
 				}
 			}
 		}
