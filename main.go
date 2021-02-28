@@ -135,6 +135,7 @@ func StartCheck() {
 
 				defer resp.Body.Close()
 			}
+
 			if Limit != 0 && Limit == i {
 				break
 			}
@@ -144,7 +145,7 @@ func StartCheck() {
 
 func (Data LewdPayload) IsNew() bool {
 	for _, v := range LewdsPic {
-		if v == Data {
+		if v.URL == Data.URL {
 			return false
 		}
 	}
