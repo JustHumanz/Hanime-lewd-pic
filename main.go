@@ -2,14 +2,16 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
-	"strconv"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -20,15 +22,15 @@ import (
 
 var (
 	HTTPProxy         *url.URL
-	Payload           LewdPic
+	Payload           [][]Danbooru
 	DiscordWebHookURL string
 	FistRunning       *bool
-	LewdsPic          []LewdPayload
-	Limit             int
+	LewdsPic          []string
+	Tags              []string
 )
 
 const (
-	EndPoint = "https://hr.hanime.tv/api/v8/community_uploads?channel_name__in[]=nsfw-general,yuri&query_method=offset&__offset=0"
+	EndPoint = "https://danbooru.donmai.us/posts.json?tags=order:change%20"
 )
 
 func init() {
@@ -51,18 +53,16 @@ func init() {
 	if Web != "" {
 		DiscordWebHookURL = Web
 	} else {
-		log.Panic("DISCORD WebHookURL not found")
+		log.Fatal("DISCORD WebHookURL not found")
 	}
 
-	Lmt := os.Getenv("LIMIT")
-	if Lmt != "" {
-		tmp, err := strconv.Atoi(Lmt)
-		if err != nil {
-			log.Error(err, "ignore limit")
-		} else {
-			Limit = tmp
-		}
+	tgs := os.Getenv("TAGS")
+	if tgs != "" {
+		Tags = strings.Split(tgs, ",")
+	} else {
+		log.Fatal("Tags not found")
 	}
+
 	log.SetFormatter(&log.TextFormatter{FullTimestamp: true})
 }
 
@@ -71,13 +71,7 @@ func main() {
 	StartCheck()
 	c := cron.New()
 	c.Start()
-
-	if os.Getenv("Dev") == "true" {
-		log.Info("Running dev mode")
-		c.AddFunc("@every 0h1m0s", StartCheck)
-	} else {
-		c.AddFunc("@every 0h5m0s", StartCheck)
-	}
+	c.AddFunc("@every 0h2m0s", StartCheck)
 
 	shutdown := make(chan int)
 	sigChan := make(chan os.Signal, 1)
@@ -94,72 +88,95 @@ func main() {
 }
 
 func StartCheck() {
-	log.Info("Start checking sins")
-	Data := Curl(EndPoint)
-	err := json.Unmarshal(Data, &Payload)
-	if err != nil {
-		log.Error(err)
+	for _, v := range Tags {
+		var tmp []Danbooru
+		log.Info("Start checking lewd ", v)
+		Data, err := Curl(EndPoint + v + "&limit=20")
+		if err != nil {
+			log.Error(err)
+			break
+		}
+		err = json.Unmarshal(Data, &tmp)
+		if err != nil {
+			log.Error(err)
+		}
+		Payload = append(Payload, tmp)
 	}
 
-	if *FistRunning {
-		log.Info("First Running")
-		tmp := false
-		FistRunning = &tmp
-		for _, v := range Payload.Data {
-			LewdsPic = append(LewdsPic, v)
-		}
-	} else {
-		for i, v := range Payload.Data {
-			if v.IsNew() {
-				v.Append()
-				log.Info("New Pic", v.URL)
-				Pic, err := json.Marshal(map[string]interface{}{
-					"username":   v.Username,
-					"avatar_url": v.UserAvatarURL,
-					"content":    v.URL,
-				})
-				if err != nil {
-					log.Error(err)
+	if Payload != nil {
+		if *FistRunning {
+			log.Info("First Running")
+			tmp := false
+			FistRunning = &tmp
+			for _, v := range Payload {
+				for _, v2 := range v {
+					if v2.CheckRSS() {
+						v2.AddNewLewd()
+					}
 				}
-
-				req, err := http.NewRequest("POST", DiscordWebHookURL, bytes.NewReader(Pic))
-				if err != nil {
-					log.Error(err)
-				}
-				req.Header.Set("Content-Type", "application/json")
-
-				resp, err := http.DefaultClient.Do(req)
-				if err != nil {
-					log.Error(err)
-				}
-
-				defer resp.Body.Close()
 			}
+		} else {
+			for _, v := range Payload {
+				for _, v2 := range v {
+					if v2.CheckNew() && v2.CheckRSS() {
+						log.Info("New Pic", v2.ID)
+						v2.AddNewLewd()
+						Pic, err := json.Marshal(map[string]interface{}{
+							"content": v2.FileURL,
+						})
+						if err != nil {
+							log.Error(err)
+						}
 
-			if Limit != 0 && Limit == i {
-				break
+						req, err := http.NewRequest("POST", DiscordWebHookURL, bytes.NewReader(Pic))
+						if err != nil {
+							log.Error(err)
+						}
+						req.Header.Set("Content-Type", "application/json")
+
+						resp, err := http.DefaultClient.Do(req)
+						if err != nil {
+							log.Error(err)
+						}
+
+						defer resp.Body.Close()
+					}
+				}
 			}
 		}
 	}
 }
 
-func (Data LewdPayload) IsNew() bool {
+func (Data Danbooru) CheckRSS() bool {
+	safebutcrott, _ := regexp.MatchString("(swimsuits|lingerie|pantyshot|bunny_ears)", Data.TagString)
+	if Data.Rating == "e" || Data.Rating == "q" || safebutcrott {
+		return true
+	}
+	log.Info(Data.FileURL)
+	return false
+}
+
+func (Data Danbooru) CheckNew() bool {
 	for _, v := range LewdsPic {
-		if v.URL == Data.URL {
+		if Data.FileURL == v {
 			return false
 		}
 	}
+
 	return true
 }
 
-func (Data LewdPayload) Append() {
-	LewdsPic = append(LewdsPic, Data)
+func (Data Danbooru) AddNewLewd() {
+	LewdsPic = append(LewdsPic, Data.FileURL)
 }
 
-func Curl(URL string) []byte {
-	client := http.DefaultClient
+func Curl(URL string) ([]byte, error) {
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	client := http.Client{Transport: tr}
 	if HTTPProxy != nil {
-		client = &http.Client{
+		client = http.Client{
 			Transport: &http.Transport{
 				Proxy: http.ProxyURL(HTTPProxy),
 				DialContext: (&net.Dialer{
@@ -171,49 +188,75 @@ func Curl(URL string) []byte {
 
 	req, err := http.NewRequest(http.MethodGet, URL, nil)
 	if err != nil {
-		log.Error(err)
+		return nil, err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:62.0) Gecko/20100101 Firefox/62.0")
+	req.Header.Set("Host", "danbooru.donmai.us")
 
 	result, err := client.Do(req)
 	if err != nil {
-		log.Error(err)
+		return nil, err
 	}
 
 	if result.StatusCode != http.StatusOK {
-		log.Error(result.Status)
+		return nil, errors.New(result.Status)
 	}
 
 	data, err := ioutil.ReadAll(result.Body)
 	if err != nil {
-		log.Error((err))
+		return nil, err
 	}
-	return data
+	return data, nil
 }
 
-type LewdPic struct {
-	Meta struct {
-		Total  int         `json:"total"`
-		Offset int         `json:"offset"`
-		Count  int         `json:"count"`
-		Error  interface{} `json:"error"`
-	} `json:"meta"`
-	Data []LewdPayload `json:"data"`
-}
-
-type LewdPayload struct {
-	ID            int    `json:"id"`
-	ChannelName   string `json:"channel_name"`
-	Username      string `json:"username"`
-	URL           string `json:"url"`
-	ProxyURL      string `json:"proxy_url"`
-	Extension     string `json:"extension"`
-	Width         int    `json:"width"`
-	Height        int    `json:"height"`
-	Filesize      int    `json:"filesize"`
-	CreatedAtUnix int    `json:"created_at_unix"`
-	UpdatedAtUnix int    `json:"updated_at_unix"`
-	DiscordUserID string `json:"discord_user_id"`
-	UserAvatarURL string `json:"user_avatar_url"`
-	CanonicalURL  string `json:"canonical_url"`
+type Danbooru struct {
+	ID                  int         `json:"id,omitempty"`
+	CreatedAt           string      `json:"created_at"`
+	UploaderID          int         `json:"uploader_id"`
+	Score               int         `json:"score"`
+	Source              string      `json:"source"`
+	Md5                 string      `json:"md5,omitempty"`
+	LastCommentBumpedAt interface{} `json:"last_comment_bumped_at"`
+	Rating              string      `json:"rating"`
+	ImageWidth          int         `json:"image_width"`
+	ImageHeight         int         `json:"image_height"`
+	TagString           string      `json:"tag_string"`
+	IsNoteLocked        bool        `json:"is_note_locked"`
+	FavCount            int         `json:"fav_count"`
+	FileExt             string      `json:"file_ext,omitempty"`
+	LastNotedAt         interface{} `json:"last_noted_at"`
+	IsRatingLocked      bool        `json:"is_rating_locked"`
+	ParentID            interface{} `json:"parent_id"`
+	HasChildren         bool        `json:"has_children"`
+	ApproverID          interface{} `json:"approver_id"`
+	TagCountGeneral     int         `json:"tag_count_general"`
+	TagCountArtist      int         `json:"tag_count_artist"`
+	TagCountCharacter   int         `json:"tag_count_character"`
+	TagCountCopyright   int         `json:"tag_count_copyright"`
+	FileSize            int         `json:"file_size"`
+	IsStatusLocked      bool        `json:"is_status_locked"`
+	PoolString          string      `json:"pool_string"`
+	UpScore             int         `json:"up_score"`
+	DownScore           int         `json:"down_score"`
+	IsPending           bool        `json:"is_pending"`
+	IsFlagged           bool        `json:"is_flagged"`
+	IsDeleted           bool        `json:"is_deleted"`
+	TagCount            int         `json:"tag_count"`
+	UpdatedAt           string      `json:"updated_at"`
+	IsBanned            bool        `json:"is_banned"`
+	PixivID             int         `json:"pixiv_id"`
+	LastCommentedAt     interface{} `json:"last_commented_at"`
+	HasActiveChildren   bool        `json:"has_active_children"`
+	BitFlags            int         `json:"bit_flags"`
+	TagCountMeta        int         `json:"tag_count_meta"`
+	HasLarge            bool        `json:"has_large"`
+	HasVisibleChildren  bool        `json:"has_visible_children"`
+	TagStringGeneral    string      `json:"tag_string_general"`
+	TagStringCharacter  string      `json:"tag_string_character"`
+	TagStringCopyright  string      `json:"tag_string_copyright"`
+	TagStringArtist     string      `json:"tag_string_artist"`
+	TagStringMeta       string      `json:"tag_string_meta"`
+	FileURL             string      `json:"file_url,omitempty"`
+	LargeFileURL        string      `json:"large_file_url,omitempty"`
+	PreviewFileURL      string      `json:"preview_file_url,omitempty"`
 }
