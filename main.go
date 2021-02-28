@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -23,10 +24,11 @@ var (
 	DiscordWebHookURL string
 	FistRunning       *bool
 	LewdsPic          []LewdPayload
+	Limit             int
 )
 
 const (
-	EndPoint = "https://hr.hanime.tv/api/v8/community_uploads?channel_name__in[]=nsfw-general&query_method=offset&__offset=0"
+	EndPoint = "https://hr.hanime.tv/api/v8/community_uploads?channel_name__in[]=nsfw-general,yuri&query_method=offset&__offset=0"
 )
 
 func init() {
@@ -50,6 +52,16 @@ func init() {
 		DiscordWebHookURL = Web
 	} else {
 		log.Panic("DISCORD WebHookURL not found")
+	}
+
+	Lmt := os.Getenv("LIMIT")
+	if Lmt != "" {
+		tmp, err := strconv.Atoi(Lmt)
+		if err != nil {
+			log.Error(err, "ignore limit")
+		} else {
+			Limit = tmp
+		}
 	}
 	log.SetFormatter(&log.TextFormatter{FullTimestamp: true})
 }
@@ -97,7 +109,7 @@ func StartCheck() {
 			LewdsPic = append(LewdsPic, v)
 		}
 	} else {
-		for _, v := range Payload.Data {
+		for i, v := range Payload.Data {
 			if v.IsNew() {
 				v.Append()
 				log.Info("New Pic", v.URL)
@@ -122,6 +134,9 @@ func StartCheck() {
 				}
 
 				defer resp.Body.Close()
+			}
+			if Limit != 0 && Limit == i {
+				break
 			}
 		}
 	}
