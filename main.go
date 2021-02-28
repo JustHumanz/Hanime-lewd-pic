@@ -121,8 +121,9 @@ func StartCheck() {
 					if v2.CheckNew() && v2.CheckRSS() {
 						log.Info("New Pic", v2.ID)
 						v2.AddNewLewd()
+						fixURL := strings.Replace(v2.FileURL, "147.135.4.93", "danbooru.donmai.us", -1)
 						Pic, err := json.Marshal(map[string]interface{}{
-							"content": v2.FileURL,
+							"content": fixURL,
 						})
 						if err != nil {
 							log.Error(err)
