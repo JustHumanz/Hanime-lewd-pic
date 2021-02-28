@@ -152,7 +152,6 @@ func (Data Danbooru) CheckRSS() bool {
 	if Data.Rating == "e" || Data.Rating == "q" || safebutcrott {
 		return true
 	}
-	log.Info(Data.FileURL)
 	return false
 }
 
