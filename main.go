@@ -29,6 +29,7 @@ var (
 	RemoveDuplicate   bool
 	LewdsPic          []string
 	Tags              []string
+	DisableOthers     []string
 )
 
 const (
@@ -81,6 +82,11 @@ func init() {
 		}
 	} else {
 		RemoveDuplicate = true
+	}
+
+	opt := os.Getenv("DISABLETAGS")
+	if opt != "" {
+		DisableOthers = strings.Split(opt, ",")
 	}
 
 	log.SetFormatter(&log.TextFormatter{FullTimestamp: true})
@@ -175,6 +181,13 @@ func (Data Danbooru) CheckRSS() bool {
 
 	if RemoveDuplicate && Data.HasChildren {
 		return false
+	}
+
+	if DisableOthers != nil {
+		others, _ := regexp.MatchString(strings.Join(DisableOthers, "|"), Data.TagString)
+		if others {
+			return false
+		}
 	}
 
 	if Data.Rating == "e" || Data.Rating == "q" || safebutcrott {
