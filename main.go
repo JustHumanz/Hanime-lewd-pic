@@ -26,6 +26,7 @@ var (
 	DiscordWebHookURL string
 	FistRunning       *bool
 	DisableMale       bool
+	RemoveDuplicate   bool
 	LewdsPic          []string
 	Tags              []string
 )
@@ -71,6 +72,17 @@ func init() {
 		DisableMale = true
 	}
 
+	dpl := os.Getenv("DUPLICATE")
+	if dpl != "" {
+		if strings.ToLower(dpl) == "enable" || dpl == "1" {
+			RemoveDuplicate = false
+		} else {
+			RemoveDuplicate = true
+		}
+	} else {
+		RemoveDuplicate = true
+	}
+
 	log.SetFormatter(&log.TextFormatter{FullTimestamp: true})
 }
 
@@ -96,6 +108,7 @@ func main() {
 }
 
 func StartCheck() {
+	Counter := 0
 	for _, v := range Tags {
 		log.Info("Start checking lewd ", v)
 		Data, err := Curl(EndPoint + v + "&limit=20")
@@ -108,18 +121,23 @@ func StartCheck() {
 			log.Error(err)
 		}
 		if *FistRunning {
+			Counter++
 			log.Info("First Running")
-			tmp := false
-			FistRunning = &tmp
 			for _, v := range Payload {
 				if v.CheckRSS() {
 					v.AddNewLewd()
 				}
 			}
+
+			if Counter == len(Tags) {
+				tmp := false
+				FistRunning = &tmp
+			}
+
 		} else {
 			for _, v := range Payload {
 				if v.CheckNew() && v.CheckRSS() {
-					log.Info("New Pic", v.ID)
+					log.Info("New Pic ", v.ID)
 					v.AddNewLewd()
 					fixURL := strings.Replace(v.FileURL, "147.135.4.93", "danbooru.donmai.us", -1)
 					Pic, err := json.Marshal(map[string]interface{}{
@@ -148,10 +166,14 @@ func StartCheck() {
 }
 
 func (Data Danbooru) CheckRSS() bool {
-	safebutcrott, _ := regexp.MatchString("(swimsuits|lingerie|pantyshot|bunny_ears)", Data.TagString)
+	safebutcrott, _ := regexp.MatchString("(swimsuits|lingerie|pantyshot)", Data.TagString)
 	male, _ := regexp.MatchString("(male_focus|yaoi|mature_male|muscular_male)", Data.TagString)
 
 	if DisableMale && male {
+		return false
+	}
+
+	if RemoveDuplicate && Data.ParentID != nil {
 		return false
 	}
 
