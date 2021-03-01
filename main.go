@@ -173,7 +173,7 @@ func (Data Danbooru) CheckRSS() bool {
 		return false
 	}
 
-	if RemoveDuplicate && Data.ParentID != nil {
+	if RemoveDuplicate && Data.HasChildren {
 		return false
 	}
 
