@@ -25,6 +25,7 @@ var (
 	Payload           []Danbooru
 	DiscordWebHookURL string
 	FistRunning       *bool
+	DisableMale       bool
 	LewdsPic          []string
 	Tags              []string
 )
@@ -61,6 +62,13 @@ func init() {
 		Tags = strings.Split(tgs, ",")
 	} else {
 		log.Fatal("Tags not found")
+	}
+
+	Ml := os.Getenv("MALE")
+	if Ml != "" {
+		DisableMale = false
+	} else {
+		DisableMale = true
 	}
 
 	log.SetFormatter(&log.TextFormatter{FullTimestamp: true})
@@ -141,6 +149,12 @@ func StartCheck() {
 
 func (Data Danbooru) CheckRSS() bool {
 	safebutcrott, _ := regexp.MatchString("(swimsuits|lingerie|pantyshot|bunny_ears)", Data.TagString)
+	male, _ := regexp.MatchString("(male_focus|yaoi|mature_male|muscular_male)", Data.TagString)
+
+	if DisableMale && male {
+		return false
+	}
+
 	if Data.Rating == "e" || Data.Rating == "q" || safebutcrott {
 		return true
 	}
