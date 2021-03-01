@@ -66,9 +66,13 @@ func init() {
 		log.Fatal("Tags not found")
 	}
 
-	Ml := os.Getenv("MALE")
-	if Ml != "" {
-		DisableMale = false
+	Male := os.Getenv("MALE")
+	if Male != "" {
+		if strings.ToLower(Male) == "disable" {
+			DisableMale = true
+		} else {
+			DisableMale = false
+		}
 	} else {
 		DisableMale = true
 	}
