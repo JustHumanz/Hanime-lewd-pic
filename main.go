@@ -68,10 +68,10 @@ func init() {
 
 	Male := os.Getenv("MALE")
 	if Male != "" {
-		if strings.ToLower(Male) == "disable" {
-			DisableMale = true
-		} else {
+		if strings.ToLower(Male) == "enable" {
 			DisableMale = false
+		} else {
+			DisableMale = true
 		}
 	} else {
 		DisableMale = true
