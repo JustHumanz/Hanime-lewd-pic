@@ -14,11 +14,11 @@ a simple discord webhook to send new lewd pic from Danbooru
 
 ###### Go
 ```
-export DISCORD=export DISCORD=https://discordapp.com/api/webhooks/blablabla/blablabla
+export DISCORD=https://discordapp.com/api/webhooks/blablabla/blablabla
 export TAGS=arknights
 export MALE=disable
 go build -o lewd 
-export DISCORD=<Discord webhook> ./lewd
+./lewd
 ```
 
 ###### Docker
